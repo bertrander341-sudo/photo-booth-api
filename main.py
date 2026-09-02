@@ -3,9 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 import cv2
 import numpy as np
 import base64
-import io
-from PIL import Image
-from rembg import remove
 
 app = FastAPI()
 
@@ -24,43 +21,17 @@ async def process_photo(
     border_color: str = Query("none"),
     resolution: str = Query("1080p"),
     print_size: str = Query("none"),
-    skin_smooth: bool = Query(False),
-    bg_color: str = Query("none")
+    skin_smooth: bool = Query(False)
 ):
     try:
         image_bytes = await file.read()
-        
-        # 1. Segmentación Inteligente mediante IA (rembg) si se solicita cambio de fondo
-        if bg_color != "none":
-            input_pil = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-            # El modelo aísla el sujeto y devuelve una imagen RGBA con transparencia perfecta
-            output_pil = remove(input_pil)
-            
-            bg_colors_map = {
-                "white": (255, 255, 255, 255),
-                "black": (0, 0, 0, 255),
-                "yellow": (0, 255, 255, 255),
-                "red": (0, 0, 255, 255),
-                "blue": (255, 0, 0, 255),
-                "green": (0, 255, 0, 255),
-                "gray": (128, 128, 128, 255)
-            }
-            target_rgba = bg_colors_map.get(bg_color, (255, 255, 255, 255))
-            
-            # Crear fondo sólido del color seleccionado
-            background = Image.new("RGBA", output_pil.size, target_rgba)
-            combined = Image.alpha_composite(background, output_pil)
-            
-            # Convertir de vuelta a formato OpenCV (BGR)
-            frame = cv2.cvtColor(np.array(combined.convert("RGB")), cv2.COLOR_RGB2BGR)
-        else:
-            nparr = np.frombuffer(image_bytes, np.uint8)
-            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
         if frame is None:
             raise HTTPException(status_code=400, detail="Imagen inválida")
 
-        # 2. Estilos visuales
+        # 1. Estilos visuales
         if style == "cyberpunk":
             matrix = np.array([[1.3, 0, 0], [0, 0.9, 0], [0, 0, 1.6]])
             frame = cv2.transform(frame, matrix)
@@ -76,11 +47,11 @@ async def process_photo(
             matrix = np.array([[0.9, 0, 0], [0, 1.0, 0], [0, 0, 1.2]])
             frame = cv2.transform(frame, matrix)
 
-        # 3. Retoque suave de piel
+        # 2. Retoque suave de piel
         if skin_smooth:
             frame = cv2.bilateralFilter(frame, d=9, sigmaColor=75, sigmaSpace=75)
 
-        # 4. Tamaños de impresión
+        # 3. Tamaños de impresión (Carnet, Pasaporte, Jumbo)
         h, w = frame.shape[:2]
         if print_size in ["carnet", "pasaporte", "jumbo"]:
             ratios = {"carnet": 3.0/4.0, "pasaporte": 4.0/5.0, "jumbo": 2.0/3.0}
@@ -95,7 +66,7 @@ async def process_photo(
                 start_y = (h - new_h) // 2
                 frame = frame[start_y:start_y + new_h, :]
 
-        # 5. Resoluciones adaptativas (1080p, 4K, 8K)
+        # 4. Resoluciones (1080p, 4K, 8K) con nitidez adaptativa
         height, width = frame.shape[:2]
         target_width = 7680 if resolution == "8k" else (3840 if resolution == "4k" else 1920)
         target_height = int(height * (target_width / width))
@@ -105,7 +76,7 @@ async def process_photo(
         strength = 1.8 if resolution in ["4k", "8k"] else 1.3
         frame = cv2.addWeighted(frame, strength, gaussian, -(strength - 1.0), 0)
 
-        # 6. Marcos personalizados
+        # 5. Marcos personalizados
         if border_color != "none":
             colors = {
                 "white": (255, 255, 255), 
@@ -117,7 +88,7 @@ async def process_photo(
             border_thickness = int(max(frame.shape[0], frame.shape[1]) * 0.025)
             frame = cv2.copyMakeBorder(frame, border_thickness, border_thickness, border_thickness, border_thickness, cv2.BORDER_CONSTANT, value=bgr_color)
 
-        # 7. Codificación final en base64
+        # 6. Codificación y respuesta en base64
         _, encoded_img = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 92])
         encoded_base64 = base64.b64encode(encoded_img).decode('utf-8')
 
