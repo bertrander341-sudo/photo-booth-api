@@ -32,7 +32,32 @@ async def process_photo(
         if frame is None:
             raise HTTPException(status_code=400, detail="Imagen inválida")
 
-        # 1. Estilos visuales
+        # 1. Reemplazo de fondo por color sólido seleccionado (Amarillo, Rojo, Azul, etc.)
+        if bg_color != "none":
+            bg_colors_map = {
+                "white": (255, 255, 255),
+                "black": (0, 0, 0),
+                "yellow": (0, 255, 255),  # Amarillo BGR en OpenCV
+                "red": (0, 0, 255),      # Rojo BGR en OpenCV
+                "blue": (255, 0, 0),     # Azul BGR en OpenCV
+                "green": (0, 255, 0),    # Verde BGR en OpenCV
+                "gray": (128, 128, 128)  # Gris BGR
+            }
+            target_bgr = bg_colors_map.get(bg_color, (255, 255, 255))
+            
+            # Convertir a escala de grises y detectar el fondo claro de estudio
+            gray_img = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            
+            # Umbral para aislar fondos blancos o claros de estudio fotográfico
+            _, thresh = cv2.threshold(gray_img, 220, 255, cv2.THRESH_BINARY)
+            
+            # Invertir para enmascarar el fondo y proteger al sujeto/ropa
+            mask_bg = cv2.bitwise_not(thresh)
+            
+            # Aplicar el color seleccionado únicamente al fondo
+            frame[mask_bg == 0] = target_bgr
+
+        # 2. Estilos visuales
         if style == "cyberpunk":
             matrix = np.array([[1.3, 0, 0], [0, 0.9, 0], [0, 0, 1.6]])
             frame = cv2.transform(frame, matrix)
@@ -48,11 +73,11 @@ async def process_photo(
             matrix = np.array([[0.9, 0, 0], [0, 1.0, 0], [0, 0, 1.2]])
             frame = cv2.transform(frame, matrix)
 
-        # 2. Retoque suave de piel
+        # 3. Retoque suave de piel
         if skin_smooth:
             frame = cv2.bilateralFilter(frame, d=9, sigmaColor=75, sigmaSpace=75)
 
-        # 3. Tamaños de impresión (Carnet, Pasaporte, Jumbo)
+        # 4. Tamaños de impresión (Carnet, Pasaporte, Jumbo)
         h, w = frame.shape[:2]
         if print_size in ["carnet", "pasaporte", "jumbo"]:
             ratios = {"carnet": 3.0/4.0, "pasaporte": 4.0/5.0, "jumbo": 2.0/3.0}
@@ -67,7 +92,7 @@ async def process_photo(
                 start_y = (h - new_h) // 2
                 frame = frame[start_y:start_y + new_h, :]
 
-        # 4. Resoluciones (1080p, 4K, 8K) con nitidez adaptativa
+        # 5. Resoluciones (1080p, 4K, 8K) con nitidez adaptativa
         height, width = frame.shape[:2]
         target_width = 7680 if resolution == "8k" else (3840 if resolution == "4k" else 1920)
         target_height = int(height * (target_width / width))
@@ -77,7 +102,7 @@ async def process_photo(
         strength = 1.8 if resolution in ["4k", "8k"] else 1.3
         frame = cv2.addWeighted(frame, strength, gaussian, -(strength - 1.0), 0)
 
-        # 5. Marcos personalizados
+        # 6. Marcos personalizados
         if border_color != "none":
             colors = {
                 "white": (255, 255, 255), 
@@ -89,7 +114,7 @@ async def process_photo(
             border_thickness = int(max(frame.shape[0], frame.shape[1]) * 0.025)
             frame = cv2.copyMakeBorder(frame, border_thickness, border_thickness, border_thickness, border_thickness, cv2.BORDER_CONSTANT, value=bgr_color)
 
-        # 6. Codificación y respuesta en base64
+        # 7. Codificación y respuesta en base64
         _, encoded_img = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 92])
         encoded_base64 = base64.b64encode(encoded_img).decode('utf-8')
 
