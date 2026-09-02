@@ -21,7 +21,8 @@ async def process_photo(
     border_color: str = Query("none"),
     resolution: str = Query("1080p"),
     print_size: str = Query("none"),
-    skin_smooth: bool = Query(False)
+    skin_smooth: bool = Query(False),
+    bg_color: str = Query("none")
 ):
     try:
         image_bytes = await file.read()
