@@ -48,7 +48,7 @@ async def process_photo(
             matrix = np.array([[0.9, 0, 0], [0, 1.0, 0], [0, 0, 1.2]])
             frame = cv2.transform(frame, matrix)
 
-        # 2. Reemplazo de fondo profesional por inundación desde los bordes (FloodFill)
+        # 2. Reemplazo de fondo preciso por inundación controlada (FloodFill ajustado)
         if bg_color != "none":
             bg_colors_map = {
                 "white": (255, 255, 255),
@@ -64,10 +64,9 @@ async def process_photo(
             h_img, w_img = frame.shape[:2]
             flood_mask = np.zeros((h_img + 2, w_img + 2), np.uint8)
             
-            cv2.floodFill(frame, flood_mask, (0, 0), target_bgr, (25, 25, 25), (25, 25, 25), cv2.FLOODFILL_FIXED_RANGE)
-            cv2.floodFill(frame, flood_mask, (w_img - 1, 0), target_bgr, (25, 25, 25), (25, 25, 25), cv2.FLOODFILL_FIXED_RANGE)
-            cv2.floodFill(frame, flood_mask, (0, h_img - 1), target_bgr, (25, 25, 25), (25, 25, 25), cv2.FLOODFILL_FIXED_RANGE)
-            cv2.floodFill(frame, flood_mask, (w_img - 1, h_img - 1), target_bgr, (25, 25, 25), (25, 25, 25), cv2.FLOODFILL_FIXED_RANGE)
+            # Tolerancia baja (10) para evitar que pase la línea del cuerpo o la camisa
+            cv2.floodFill(frame, flood_mask, (0, 0), target_bgr, (10, 10, 10), (10, 10, 10), cv2.FLOODFILL_FIXED_RANGE)
+            cv2.floodFill(frame, flood_mask, (w_img - 1, 0), target_bgr, (10, 10, 10), (10, 10, 10), cv2.FLOODFILL_FIXED_RANGE)
 
         # 3. Retoque suave de piel
         if skin_smooth:
