@@ -48,7 +48,7 @@ async def process_photo(
             matrix = np.array([[0.9, 0, 0], [0, 1.0, 0], [0, 0, 1.2]])
             frame = cv2.transform(frame, matrix)
 
-        # 2. Reemplazo de fondo por color sólido
+        # 2. Reemplazo de fondo inteligente (protegiendo la camisa blanca)
         if bg_color != "none":
             bg_colors_map = {
                 "white": (255, 255, 255),
@@ -60,11 +60,17 @@ async def process_photo(
                 "gray": (128, 128, 128)
             }
             target_bgr = bg_colors_map.get(bg_color, (255, 255, 255))
-            sample_corner = frame[0:10, 0:10]
-            avg_bg_color = np.mean(sample_corner, axis=(0, 1))
-            diff = np.sum(np.abs(frame - avg_bg_color), axis=2)
-            mask = diff < 45
-            frame[mask] = target_bgr
+            
+            gray_img = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            corner_val = int(np.mean([gray_img[0,0], gray_img[0,-1], gray_img[-1,0], gray_img[-1,-1]]))
+            
+            if corner_val > 200:
+                _, mask = cv2.threshold(gray_img, 230, 255, cv2.THRESH_BINARY_INV)
+                mask_bg = cv2.bitwise_not(mask)
+                frame[mask_bg == 255] = target_bgr
+            else:
+                _, mask_bg = cv2.threshold(gray_img, 30, 255, cv2.THRESH_BINARY)
+                frame[mask_bg == 0] = target_bgr
 
         # 3. Retoque suave de piel
         if skin_smooth:
